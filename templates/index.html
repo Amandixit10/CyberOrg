@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CyberOrg - Vulnerability Management Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <style>
         * {
             margin: 0;
@@ -247,17 +248,36 @@
             margin-top: 5px;
         }
 
-        .description {
+        details {
+            margin-bottom: 15px;
+        }
+
+        summary {
+            cursor: pointer;
+            padding: 10px;
+            background: rgba(107, 70, 193, 0.05);
+            border-radius: 10px;
+            color: #6b46c1;
+            font-weight: 600;
+        }
+
+        summary:hover {
+            background: rgba(107, 70, 193, 0.1);
+        }
+
+        .description-content, .solution-content {
+            padding: 15px;
+            background: #fff;
+            border-radius: 10px;
+            margin-top: 5px;
             color: #555;
             line-height: 1.6;
-            margin-bottom: 15px;
         }
 
         .solution {
             background: rgba(34, 197, 94, 0.05);
             border: 1px solid rgba(34, 197, 94, 0.2);
             border-radius: 10px;
-            padding: 15px;
             margin-top: 15px;
         }
 
@@ -266,11 +286,6 @@
             margin-bottom: 8px;
             font-size: 1rem;
             font-weight: 600;
-        }
-
-        .solution p {
-            color: #555;
-            line-height: 1.5;
         }
 
         .no-data {
@@ -328,6 +343,40 @@
                 grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
             }
         }
+
+        .pdf-form {
+            display: none;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        .pdf-form.active {
+            display: block;
+        }
+        .pdf-input {
+            padding: 10px;
+            margin: 10px 0;
+            border: 2px solid rgba(107, 70, 193, 0.2);
+            border-radius: 5px;
+            width: 100%;
+            max-width: 300px;
+        }
+        .pdf-btn {
+            background: linear-gradient(135deg, #8b5cf6, #6b46c1);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .pdf-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 10px rgba(139, 92, 246, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -341,24 +390,28 @@
             <button class="scan-btn" id="scanBtn" onclick="performScan()">
                 🔍 Start Vulnerability Scan
             </button>
+            <button class="scan-btn" id="pdfBtn" onclick="togglePdfForm()">
+                📄 Generate PDF Report
+            </button>
             <div class="loading" id="loading">
                 <div class="loading-spinner"></div>
                 <p>Scanning vulnerabilities...</p>
             </div>
+            <div class="pdf-form" id="pdfForm">
+                <input type="text" class="pdf-input" id="orgName" placeholder="Organization Name" required>
+                <input type="text" class="pdf-input" id="reportName" placeholder="Report Name" required>
+                <button class="pdf-btn" onclick="generatePdf()">Generate</button>
+            </div>
             <div style="margin-top: 15px; font-size: 0.9rem; color: #666;">
-                <p><strong>Note:</strong> This will trigger the solution generation script and load data from <code>./output/solutions/enriched_vulnerability_solutions.json</code>.</p>
-                <p>If the file is not found after scanning, sample data will be displayed.</p>
+                <p><strong>Note:</strong> Ensure <code>enriched_vulnerability_solutions.json</code> is in <code>./output/solutions/</code>.</p>
+                <p>If the file is not found, sample data will be displayed.</p>
             </div>
         </div>
 
         <div id="results" class="hidden">
-            <div class="stats-grid" id="statsGrid">
-                <!-- Stats will be populated here -->
-            </div>
-
+            <div class="stats-grid" id="statsGrid"></div>
             <div class="vulnerabilities-section">
                 <div class="section-title">Vulnerability Analysis Results</div>
-                
                 <div class="filter-section">
                     <label for="severityFilter">Filter by Severity:</label>
                     <select id="severityFilter" class="filter-select" onchange="filterVulnerabilities()">
@@ -370,10 +423,7 @@
                         <option value="info">Info</option>
                     </select>
                 </div>
-
-                <div id="vulnerabilitiesList">
-                    <!-- Vulnerabilities will be populated here -->
-                </div>
+                <div id="vulnerabilitiesList"></div>
             </div>
         </div>
     </div>
@@ -387,56 +437,37 @@
             const loading = document.getElementById('loading');
             const results = document.getElementById('results');
 
-            console.log("Starting scan...");
-
-            // Show loading state
             scanBtn.disabled = true;
             loading.style.display = 'block';
             results.classList.add('hidden');
 
             try {
-                // Trigger the script via Flask
-                console.log("Sending request to /scan...");
-                const scanResponse = await fetch('/scan', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                let dataLoaded = false;
+                try {
+                    const response = await fetch('./static/solutions/enriched_vulnerability_solutions.json');
+                    if (response.ok) {
+                        const data = await response.json();
+                        vulnerabilities = Array.isArray(data) ? data : [data];
+                        console.log('Loaded vulnerabilities:', vulnerabilities);
+                        dataLoaded = true;
                     }
-                });
-                console.log("Scan response status:", scanResponse.status);
-                const scanResult = await scanResponse.json();
-                console.log("Scan result:", scanResult);
-                if (scanResult.status !== 'success') {
-                    throw new Error(scanResult.message);
+                } catch (e) {
+                    console.log('Failed to load ./output/solutions/enriched_vulnerability_solutions.json:', e);
                 }
 
-                // Load updated data from /data endpoint
-                console.log("Fetching data from /data...");
-                const dataResponse = await fetch('/data');
-                console.log("Data response status:", dataResponse.status);
-                if (dataResponse.ok) {
-                    vulnerabilities = await dataResponse.json();
-                    console.log("Loaded vulnerabilities:", vulnerabilities);
-                } else {
-                    throw new Error('Failed to load data after scan');
-                }
-
-                // If no data loaded, use sample data
-                if (!vulnerabilities || vulnerabilities.length === 0) {
-                    console.log('Using sample data - no vulnerabilities found after scan');
+                if (!dataLoaded) {
+                    console.log('Using sample data - ensure the JSON file exists at ./output/solutions/');
                     vulnerabilities = getSampleData();
                 }
 
-                // Process and display the data
                 displayResults();
-                
             } catch (error) {
-                console.error('Error during scan:', error);
-                // Show sample data on error
+                console.error('Error loading vulnerabilities:', error);
                 vulnerabilities = getSampleData();
                 displayResults();
             } finally {
-                // Hide loading state
                 scanBtn.disabled = false;
                 loading.style.display = 'none';
                 results.classList.remove('hidden');
@@ -446,22 +477,13 @@
         function getSampleData() {
             return [
                 {
-                    description: "SQL Injection vulnerability in user authentication module. Attackers can bypass authentication by injecting malicious SQL code into login forms, potentially gaining unauthorized access to sensitive data and system resources.",
+                    description: "SQL Injection vulnerability in user authentication module...",
                     cvss_vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
                     base_score: 9.8,
                     temporal_score: 9.5,
-                    overall_score: 9.6,
-                    severity: "Critical",
-                    solution: "Implement parameterized queries and input validation. Use prepared statements for all database interactions. Sanitize all user inputs and enforce least privilege access controls."
-                },
-                {
-                    description: "Cross-Site Scripting (XSS) vulnerability detected in user profile pages. Malicious scripts can be executed in the context of other users' browsers, leading to session hijacking, cookie theft, and unauthorized actions.",
-                    cvss_vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
-                    base_score: 6.1,
-                    temporal_score: 5.8,
-                    overall_score: 5.9,
-                    severity: "Medium",
-                    solution: "Implement proper input validation and output encoding. Use Content Security Policy (CSP) headers. Sanitize all user-generated content before rendering."
+                    environmental_score: 9.6,
+                    severity: "critical",
+                    solution: "Implement parameterized queries and input validation..."
                 }
             ];
         }
@@ -473,47 +495,30 @@
         }
 
         function updateStats() {
+            console.log('Vulnerabilities array:', vulnerabilities);
             const stats = {
                 total: vulnerabilities.length,
-                critical: vulnerabilities.filter(v => (v.severity || '').toLowerCase() === 'critical').length,
-                high: vulnerabilities.filter(v => (v.severity || '').toLowerCase() === 'high').length,
-                medium: vulnerabilities.filter(v => (v.severity || '').toLowerCase() === 'medium').length,
-                low: vulnerabilities.filter(v => (v.severity || '').toLowerCase() === 'low').length,
-                info: vulnerabilities.filter(v => (v.severity || '').toLowerCase() === 'info').length
+                critical: vulnerabilities.filter(v => v.severity.toLowerCase() === 'critical').length,
+                high: vulnerabilities.filter(v => v.severity.toLowerCase() === 'high').length,
+                medium: vulnerabilities.filter(v => v.severity.toLowerCase() === 'medium').length,
+                low: vulnerabilities.filter(v => v.severity.toLowerCase() === 'low').length,
+                info: vulnerabilities.filter(v => v.severity.toLowerCase() === 'info').length
             };
+            console.log('Stats:', stats);
 
             const statsGrid = document.getElementById('statsGrid');
             statsGrid.innerHTML = `
-                <div class="stat-card">
-                    <div class="stat-number">${stats.total}</div>
-                    <div class="stat-label">Total Vulnerabilities</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number critical">${stats.critical}</div>
-                    <div class="stat-label">Critical</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number high">${stats.high}</div>
-                    <div class="stat-label">High</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number medium">${stats.medium}</div>
-                    <div class="stat-label">Medium</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number low">${stats.low}</div>
-                    <div class="stat-label">Low</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number info">${stats.info}</div>
-                    <div class="stat-label">Info</div>
-                </div>
+                <div class="stat-card"><div class="stat-number">${stats.total}</div><div class="stat-label">Total Vulnerabilities</div></div>
+                <div class="stat-card"><div class="stat-number critical">${stats.critical}</div><div class="stat-label">Critical</div></div>
+                <div class="stat-card"><div class="stat-number high">${stats.high}</div><div class="stat-label">High</div></div>
+                <div class="stat-card"><div class="stat-number medium">${stats.medium}</div><div class="stat-label">Medium</div></div>
+                <div class="stat-card"><div class="stat-number low">${stats.low}</div><div class="stat-label">Low</div></div>
+                <div class="stat-card"><div class="stat-number info">${stats.info}</div><div class="stat-label">Info</div></div>
             `;
         }
 
         function renderVulnerabilities() {
             const vulnerabilitiesList = document.getElementById('vulnerabilitiesList');
-            
             if (filteredVulnerabilities.length === 0) {
                 vulnerabilitiesList.innerHTML = `
                     <div class="no-data">
@@ -525,66 +530,84 @@
                 return;
             }
 
-            vulnerabilitiesList.innerHTML = filteredVulnerabilities.map((vuln, index) => `
-                <div class="vuln-card" style="border-left-color: ${getSeverityColor(vuln.severity)}">
+            vulnerabilitiesList.innerHTML = filteredVulnerabilities.map((vuln, index) => {
+                const severityLower = vuln.severity.toLowerCase();
+                const descriptionPreview = vuln.description.substring(0, 100) + (vuln.description.length > 100 ? '...' : '');
+                const solutionPreview = vuln.solution.substring(0, 100) + (vuln.solution.length > 100 ? '...' : '');
+                console.log(`Vuln ${index} environmental_score:`, vuln.environmental_score);
+                return `
+                <div class="vuln-card" style="border-left-color: ${getSeverityColor(severityLower)}">
                     <div class="vuln-header">
-                        <div>
-                            <span class="severity-badge severity-${(vuln.severity || '').toLowerCase()}">
-                                ${(vuln.severity || '').toUpperCase()}
-                            </span>
-                        </div>
+                        <div><span class="severity-badge severity-${severityLower}">${severityLower.toUpperCase()}</span></div>
                     </div>
-                    
                     <div class="cvss-scores">
-                        <div class="cvss-item">
-                            <div class="cvss-score">${vuln.base_score || 'N/A'}</div>
-                            <div class="cvss-label">Base Score</div>
-                        </div>
-                        <div class="cvss-item">
-                            <div class="cvss-score">${vuln.temporal_score || 'N/A'}</div>
-                            <div class="cvss-label">Temporal</div>
-                        </div>
-                        <div class="cvss-item">
-                            <div class="cvss-score">${vuln.overall_score || 'N/A'}</div>
-                            <div class="cvss-label">Overall</div>
-                        </div>
+                        <div class="cvss-item"><div class="cvss-score">${vuln.base_score || 'N/A'}</div><div class="cvss-label">Base Score</div></div>
+                        <div class="cvss-item"><div class="cvss-score">${vuln.temporal_score || 'N/A'}</div><div class="cvss-label">Temporal</div></div>
+                        <div class="cvss-item"><div class="cvss-score">${vuln.environmental_score !== null && vuln.environmental_score !== undefined ? vuln.environmental_score : 'N/A'}</div><div class="cvss-label">Environmental</div></div>
                     </div>
-                    
-                    <div class="description">
-                        <strong>Description:</strong><br>
-                        ${vuln.description || 'No description available'}
-                    </div>
-                    
-                    <div class="solution">
-                        <h4>💡 Solution</h4>
-                        <p>${vuln.solution || 'No solution available'}</p>
-                    </div>
+                    <details><summary>${descriptionPreview} <span style="color: #6b46c1;">(Show more)</span></summary><div class="description-content">${vuln.description || 'No description available'}</div></details>
+                    <div class="solution"><details><summary>${solutionPreview} <span style="color: #22c55e;">(Show more)</span></summary><div class="solution-content"><h4>💡 Solution</h4><p>${vuln.solution || 'No solution available'}</p></div></details></div>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         function getSeverityColor(severity) {
-            const colors = {
-                critical: '#ef4444',
-                high: '#f97316',
-                medium: '#eab308',
-                low: '#22c55e',
-                info: '#3b82f6'
-            };
-            return colors[(severity || '').toLowerCase()] || '#6b7280';
+            const colors = { critical: '#ef4444', high: '#f97316', medium: '#eab308', low: '#22c55e', info: '#3b82f6' };
+            return colors[severity.toLowerCase()] || '#6b7280';
         }
 
         function filterVulnerabilities() {
             const filterValue = document.getElementById('severityFilter').value;
-            
-            if (filterValue === 'all') {
-                filteredVulnerabilities = [...vulnerabilities];
-            } else {
-                filteredVulnerabilities = vulnerabilities.filter(vuln => (vuln.severity || '').toLowerCase() === filterValue);
-            }
-            
+            filteredVulnerabilities = filterValue === 'all' ? [...vulnerabilities] : vulnerabilities.filter(vuln => vuln.severity.toLowerCase() === filterValue);
             renderVulnerabilities();
         }
+
+        function togglePdfForm() {
+            const pdfForm = document.getElementById('pdfForm');
+            pdfForm.classList.toggle('active');
+        }
+
+        async function generatePdf() {
+            const orgName = document.getElementById('orgName').value;
+            const reportName = document.getElementById('reportName').value;
+
+            if (!orgName || !reportName) {
+                alert('Please enter both organization name and report name.');
+                return;
+            }
+
+            const response = await fetch('/generate_pdf', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    orgName: orgName,
+                    reportName: reportName,
+                    vulnerabilities: JSON.stringify(filteredVulnerabilities)
+                })
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${reportName}_report.pdf`;
+                link.click();
+                window.URL.revokeObjectURL(url);
+            } else {
+                alert('Error generating PDF: ' + await response.text());
+            }
+        }
+
+        window.addEventListener('load', () => {
+            console.log('Page loaded, checking for POST requests...');
+            document.addEventListener('submit', (e) => {
+                if (e.target.method === 'post') {
+                    console.log('Detected POST request to:', e.target.action);
+                    e.preventDefault();
+                }
+            });
+        });
     </script>
 </body>
 </html>

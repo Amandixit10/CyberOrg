@@ -117,7 +117,8 @@ Please suggest a solution that is easy to understand, actionable, and written in
         }
         
         try:
-            response = requests.post(self.api_url, json=payload, timeout=120)
+            response = requests.post(self.api_url, json=payload, timeout=120
+                                     )
             response.raise_for_status()
             result = response.json()
             solution = result.get("response", "").strip()

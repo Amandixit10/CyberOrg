@@ -1,0 +1,20 @@
+{
+  "components": [
+    {
+      "component": "Node.js",
+      "environment": "dmz",
+      "CR": "H",
+      "IR": "H",
+      "AR": "H",
+      "MAV": "P",
+      "MAC": "H",
+      "MPR": "H",
+      "MUI": "R"
+    },
+    {
+      "component": "node.js",
+      "environment": "automation highway",
+      "environmental_vector": "CR:L/IR:N/AR:M/MAV:N/MAC:H/MPR:L/MUI:N/MS:C/MC:N/MI:H/MA:L"
+    }
+  ]
+}
